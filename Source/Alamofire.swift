@@ -29,6 +29,7 @@ import Foundation
 /**
     Types adopting the `URLStringConvertible` protocol can be used to construct URL strings, which are then used to 
     construct URL requests.
+    测试
 */
 public protocol URLStringConvertible {
     /**
