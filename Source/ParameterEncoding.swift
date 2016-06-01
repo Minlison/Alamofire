@@ -92,8 +92,7 @@ public enum ParameterEncoding {
         case .URL, .URLEncodedInURL:
             func query(parameters: [String: AnyObject]) -> String {
                 var components: [(String, String)] = []
-
-                for key in parameters.keys.sort(<) {
+                for key in parameters.keys.sort(<) { // 参数按照key升序排列
                     let value = parameters[key]!
                     components += queryComponents(key, value)
                 }
@@ -186,11 +185,11 @@ public enum ParameterEncoding {
     public func queryComponents(key: String, _ value: AnyObject) -> [(String, String)] {
         var components: [(String, String)] = []
 
-        if let dictionary = value as? [String: AnyObject] {
+        if let dictionary = value as? [String: AnyObject] { // 如果传入value是字典
             for (nestedKey, value) in dictionary {
                 components += queryComponents("\(key)[\(nestedKey)]", value)
             }
-        } else if let array = value as? [AnyObject] {
+        } else if let array = value as? [AnyObject] { // 传入的参数是数组
             for value in array {
                 components += queryComponents("\(key)[]", value)
             }

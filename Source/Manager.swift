@@ -22,18 +22,24 @@
 //  THE SOFTWARE.
 //
 
+/**
+ *  Alamofire 核心类之一，在使用Alamofire的时候，可以继承该类来自定义一些公共参数
+ */
+
 import Foundation
 
 /**
     Responsible for creating and managing `Request` objects, as well as their underlying `NSURLSession`.
+    用来创建和管理Request对象和网络访问的NSURLSession
 */
 public class Manager {
 
-    // MARK: - Properties
+    // MARK: - Properties 属性列表
 
     /**
         A shared instance of `Manager`, used by top-level Alamofire request methods, and suitable for use directly 
         for any ad hoc requests.
+        Manger的单例，是 Alamofire 请求的默认选项，可以直接使用 Alamofire 进行网络访问
     */
     public static let sharedInstance: Manager = {
         let configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
@@ -44,18 +50,25 @@ public class Manager {
 
     /**
         Creates default values for the "Accept-Encoding", "Accept-Language" and "User-Agent" headers.
+        创建默认的User-Agent
     */
     public static let defaultHTTPHeaders: [String: String] = {
         // Accept-Encoding HTTP Header; see https://tools.ietf.org/html/rfc7230#section-4.2.3
+        // Accept-Encoding 默认使用gzip压缩
+
         let acceptEncoding: String = "gzip;q=1.0, compress;q=0.5"
 
         // Accept-Language HTTP Header; see https://tools.ietf.org/html/rfc7231#section-5.3.5
+        // 设置Accept-Language 抽取本地偏好里面的语言，最多提取前6种语言，使用 `, ` 号分开
+
         let acceptLanguage = NSLocale.preferredLanguages().prefix(6).enumerate().map { index, languageCode in
             let quality = 1.0 - (Double(index) * 0.1)
             return "\(languageCode);q=\(quality)"
         }.joinWithSeparator(", ")
 
         // User-Agent Header; see https://tools.ietf.org/html/rfc7231#section-5.5.3
+        // 默认UA 请求头
+
         let userAgent: String = {
             if let info = NSBundle.mainBundle().infoDictionary {
                 let executable = info[kCFBundleExecutableKey as String] as? String ?? "Unknown"
@@ -64,8 +77,9 @@ public class Manager {
                 let os = NSProcessInfo.processInfo().operatingSystemVersionString
 
                 var mutableUserAgent = NSMutableString(string: "\(executable)/\(bundle) (\(version); OS \(os))") as CFMutableString
-                let transform = NSString(string: "Any-Latin; Latin-ASCII; [:^ASCII:] Remove") as CFString
+                let transform = NSString(string: "Any-Latin; Latin-ASCII; [:^ASCII:] Remove") as CFString  // 等同于 kCFStringTransformToLatin + kCFStringTransformStripDiacritics
 
+                // 汉字转拼音
                 if CFStringTransform(mutableUserAgent, UnsafeMutablePointer<CFRange>(nil), transform, false) {
                     return mutableUserAgent as String
                 }
@@ -102,6 +116,9 @@ public class Manager {
         SessionDelegate `sessionDidFinishEventsForBackgroundURLSession` and manually call the handler when finished.
     
         `nil` by default.
+        后台线程回调handler，在 UIApplicationDelegate 方法中设置
+        如果需要在回调handler中处理自己的事件，就重写 SessionDelegate 的 `sessionDidFinishEventsForBackgroundURLSession` 方法
+
     */
     public var backgroundCompletionHandler: (() -> Void)?
 
@@ -109,13 +126,15 @@ public class Manager {
 
     /**
         Initializes the `Manager` instance with the specified configuration, delegate and server trust policy.
+        使用指定的配置文件，代理和信任策略，初始化Manager
 
-        - parameter configuration:            The configuration used to construct the managed session. 
-                                              `NSURLSessionConfiguration.defaultSessionConfiguration()` by default.
+        - parameter configuration:            The configuration used to construct the managed session.                  配置文件
+                                              `NSURLSessionConfiguration.defaultSessionConfiguration()` by default.     使用默认配置
         - parameter delegate:                 The delegate used when initializing the session. `SessionDelegate()` by
-                                              default.
+                                              default.                                                                  使用默认的SessionDelegate()
         - parameter serverTrustPolicyManager: The server trust policy manager to use for evaluating all server trust 
-                                              challenges. `nil` by default.
+                                              challenges. `nil` by default.                                             可以使用信任证书，在服务器需要的时候，会在delegate进行认证回
+                                                                                                                        调，默认为nil
 
         - returns: The new `Manager` instance.
     */
@@ -132,11 +151,13 @@ public class Manager {
 
     /**
         Initializes the `Manager` instance with the specified session, delegate and server trust policy.
+        使用指定的NSURLSession，代理和信任策略，初始化Manager
 
-        - parameter session:                  The URL session.
-        - parameter delegate:                 The delegate of the URL session. Must equal the URL session's delegate.
+        - parameter session:                  The URL session.                                                          自定义的NSURLSession
+        - parameter delegate:                 The delegate of the URL session. Must equal the URL session's delegate.   网络回调代理，该代理必须和自定义的Session代理相同
         - parameter serverTrustPolicyManager: The server trust policy manager to use for evaluating all server trust
-                                              challenges. `nil` by default.
+                                              challenges. `nil` by default.                                             可以使用信任证书，在服务器需要的时候，会在delegate进行认证回
+                                                                                                                        调，默认为nil
 
         - returns: The new `Manager` instance if the URL session's delegate matches the delegate parameter.
     */
@@ -155,8 +176,8 @@ public class Manager {
 
     private func commonInit(serverTrustPolicyManager serverTrustPolicyManager: ServerTrustPolicyManager?) {
         session.serverTrustPolicyManager = serverTrustPolicyManager
-
-        delegate.sessionDidFinishEventsForBackgroundURLSession = { [weak self] session in
+        // MARK: - 闭包防止循环引用 给闭包起别名 typealias fooBlock = (NSURLSession) -> Void
+        delegate.sessionDidFinishEventsForBackgroundURLSession = { [weak self] session in // unowned 无主引用(当循环引用的两者总是同时消失的时候使用) weak 弱引用(不保证循环引用的两者总是同时消失的时候使用)
             guard let strongSelf = self else { return }
             dispatch_async(dispatch_get_main_queue()) { strongSelf.backgroundCompletionHandler?() }
         }
@@ -166,16 +187,18 @@ public class Manager {
         session.invalidateAndCancel()
     }
 
-    // MARK: - Request
+    // MARK: - Request  请求
 
     /**
         Creates a request for the specified method, URL string, parameters, parameter encoding and headers.
+        根据指定的http方法，url地址，参数，参数编码格式和请求头创建一个请求
 
-        - parameter method:     The HTTP method.
-        - parameter URLString:  The URL string.
-        - parameter parameters: The parameters. `nil` by default.
-        - parameter encoding:   The parameter encoding. `.URL` by default.
-        - parameter headers:    The HTTP headers. `nil` by default.
+        - parameter method:     The HTTP method.                            http 方法
+        - parameter URLString:  The URL string.                             请求地址
+        - parameter parameters: The parameters. `nil` by default.           参数
+     - parameter encoding:   The parameter encoding. `.URL` by default.     参数的编码格式（URL(URL编码),URLEncodedInURL(URL编码),JSON(JSON字符
+                                                                            串),PropertyList(属性列表),Custom(自定义)）
+        - parameter headers:    The HTTP headers. `nil` by default.         请求头，默认为nil
 
         - returns: The created request.
     */
